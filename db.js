@@ -7,6 +7,7 @@ const User=new Schema({
     password: String,
     name:String
 })
+//fixing
 
 const Todo=new Schema({
     title:String,
