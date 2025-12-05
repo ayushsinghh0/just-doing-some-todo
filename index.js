@@ -2,23 +2,31 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const JWT_SECRET = "ayushsingh";
-const { UserModel, TodosModel } = require("./db");
+const { UserModel, TodoModel } = require("./db");
 
 const app = express();
 app.use(express.json());
 // Remove "&directConnection=true" from the end of the string
-mongoose.connect("mongodb+srv://admin:ayushsingh@cluster0.puqfpej.mongodb.net/todo-ayush-22?retryWrites=true&w=majority");
+mongoose.connect("mongodb+srv://admin:ayushsingh@cluster0.puqfpej.mongodb.net/todo-ayush-22?retryWrites=true&w=majority")
+.then(()=>console.log("connected to data base"))
+.catch(err=>console.log("not connected some error happened",err));
 
 app.post("/signup", async function (req, res) {
   const email = req.body.email;
   const password = req.body.password;
   const name = req.body.name;
 
-  await UserModel.create({
+  try {await UserModel.create({
     email: email,
     password: password,
     name: name,
   });
+}
+catch(err){
+    res.json({
+        msg:"something happened"
+    })
+}
 
   res.json({
     msg: "you are logged",
@@ -37,7 +45,7 @@ app.post("/signin", async function (req, res) {
   if (user) {
     const token = jwt.sign(
       {
-        id: user._id,
+        id: user._id.toString(),
       },
       JWT_SECRET
     );
@@ -53,17 +61,22 @@ app.post("/signin", async function (req, res) {
 });
 
 app.post("/todos",auth,async function(req,res){
-    const Description=req.body.Description;
-    const done=req.body.Description;
-    await TodosModel.create({
-        Description : Description,
-        done:done
+    const title=req.body.Description;
+    const newdate=new Date();
+    await TodoModel.create({
+        title : title,
+        done: false,
+        time :newdate,
+        userId:req.userId
+    })
+    res.json({
+        msg:"todo succesfully created"
     })
 })
 
 function auth(req,res,next){
 
-    const token=req.header.token;
+    const token=req.headers.token;
 
     const decodedData=jwt.verify(token,JWT_SECRET);
 
