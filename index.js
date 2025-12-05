@@ -52,4 +52,30 @@ app.post("/signin", async function (req, res) {
   }
 });
 
+app.post("/todos",auth,async function(req,res){
+    const Description=req.body.Description;
+    const done=req.body.Description;
+    await TodosModel.create({
+        Description : Description,
+        done:done
+    })
+})
+
+function auth(req,res,next){
+
+    const token=req.header.token;
+
+    const decodedData=jwt.verify(token,JWT_SECRET);
+
+    if(decodedData){
+        req.userId=decodedData.id;
+        next();
+    }
+    else{
+        res.status(403).json({
+            msg:"incorrect authentication"
+        })
+    }
+}
+
 app.listen(3000);
