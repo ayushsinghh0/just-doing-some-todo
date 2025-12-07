@@ -4,6 +4,7 @@ const bcrypt=require("bcryptjs");
 const mongoose = require("mongoose");
 const JWT_SECRET = "ayushsingh";
 const { UserModel, TodoModel } = require("./db");
+const  { z }=require("zod");
 
 const app = express();
 app.use(express.json());
@@ -13,17 +14,36 @@ mongoose.connect("mongodb+srv://admin:ayushsingh@cluster0.puqfpej.mongodb.net/to
 .catch(err=>console.log("not connected some error happened",err));
 
 app.post("/signup", async function (req, res) {
+
+    const neededbody=z.object({
+        email :z.string().email(),
+        password:z.string().min(7),
+        name:z.string().min(3).max(100)
+    })
+
+    const valid=neededbody.safeParse(req.body);
+    if(!valid.success){
+        res.json({
+            msg:"incorrect format ",
+            error:valid.error
+        })
+    }
   const email = req.body.email;
   const password = req.body.password;
   const name = req.body.name;
 
-  const newpassword=await bcrypt.hash(password,5);
+  
 
-  try {await UserModel.create({
+  try {
+    const newpassword=await bcrypt.hash(password,5);
+    await UserModel.create({
     email: email,
     password: newpassword,
     name: name,
   });
+  res.json({msg: "you are logged"})
+
+
 }
 catch(err){
     res.json({
@@ -31,21 +51,20 @@ catch(err){
     })
 }
 
-  res.json({
-    msg: "you are logged",
-  });
+  
 });
 
 app.post("/signin", async function (req, res) {
   const email = req.body.email;
-  const password = req.body.password;
+
 
   const user = await UserModel.findOne({
     email: email,
-    password: password,
+    password: password
   });
+  const check=bcrypt.verify(password,req.body.password);
 
-  if (user) {
+  if (check) {
     const token = jwt.sign(
       {
         id: user._id.toString(),
