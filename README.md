@@ -5,11 +5,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Security: OWASP Top 10](https://img.shields.io/badge/Security-OWASP_Top_10_Compliant-success.svg)](#)
-[![Architecture: Microservices](https://img.shields.io/badge/Architecture-Event--Driven-orange.svg)](#)
-[![Performance](https://img.shields.io/badge/Response_Time-under_20ms-brightgreen.svg)](#)
+[![Stack: Express & Prisma](https://img.shields.io/badge/Stack-Node_%7C_Prisma-orange.svg)](#)
+[![Performance](https://img.shields.io/badge/Response_Time-under_30ms-brightgreen.svg)](#)
 [![Auth: OAuth2/OIDC](https://img.shields.io/badge/Auth-OAuth2_%7C_OIDC-purple.svg)](#)
 
-AegisID is a production-grade, highly available, and deeply secure **Authentication and Authorization Identity Platform**. Built for modern distributed systems, it provides centralized identity management, deeply vetted OAuth2/OIDC flows, and extreme security measures out of the box, functioning as the zero-trust boundary for your entire domain.
+AegisID is a production-grade, highly reliable, and deeply secure **Authentication and Authorization Identity Platform**. Built using modern Node.js and strict TypeScript paradigms, it provides centralized identity management, properly implemented OAuth2/OIDC flows, and robust security measures out of the box, functioning as the zero-trust boundary for your microservice domain.
 
 [Documentation](#) • [API Reference](#15-api-documentation) • [Threat Model](#19-threat-model) • [Architecture](#4-system-architecture)
 
@@ -20,38 +20,34 @@ AegisID is a production-grade, highly available, and deeply secure **Authenticat
 ## 2. 🌍 Project Overview
 
 ### The Identity Trilemma in Modern Systems
-In modern distributed architectures, identity systems often fail at the intersection of **Security, Usability, and Scalability**. Building centralized identity from scratch usually results in brittle custom mechanics, whereas standard OAuth2/OIDC implementations in enterprise environments frequently suffer from:
+In modern distributed architectures, identity systems often fail at the intersection of **Security, Usability, and Interoperability**. Building centralized identity from scratch usually results in brittle custom mechanics, whereas standard OAuth2/OIDC implementations in enterprise environments frequently suffer from:
 
-1. **Token Sprawl:** Unmanaged token lifecycles leading to extreme replay attack vulnerabilities.
-2. **Stateless vs. Stateful Conflicts:** An over-reliance on purely stateless JWTs makes immediate token revocation computationally intractable.
-3. **Session Invalidation:** Microservices often struggle to globally invalidate compromised sessions in real-time.
+1. **Token Sprawl:** Unmanaged token lifecycles leading to massive replay attack vulnerabilities.
+2. **Coupled Business Logic:** Tying user identity directly to product databases instead of a centralized, isolated Identity Provider (IdP).
+3. **PKCE Failures:** Mishandling the Authorization Code flow for single-page applications.
 
 ### The AegisID Approach
-AegisID is engineered from the ground up to solve these architectural bottlenecks. By utilizing a hybrid stateful-stateless model backed by high-throughput Redis caching, AegisID guarantees **100% token revocability** without sacrificing the low latency of stateless JWT verification. It serves as an isolated Identity Provider (IdP) and Authorization Server, segregating all security boundaries away from business logic.
+AegisID is engineered to solve these architectural bottlenecks. By utilizing a hybrid system backed by PostgreSQL for persistence and Redis for ephemeral state (OAuth flows), AegisID ensures high security and performance. It serves as an isolated Identity Provider and Authorization Server, segregating all cryptographic and security boundaries away from upstream business logic. Downstream services merely verify asymmetric signatures.
 
 ---
 
 ## 3. 🎯 Core Capabilities
 
-AegisID provides comprehensive identity coverage tailored for multi-service environments:
+AegisID provides comprehensive identity coverage tailored for API-driven environments:
 
-*   **OAuth2.0 Authorization Server:** Full support for Authorization Code, Client Credentials, and Refresh Token grants.
+*   **OAuth2.0 Authorization Server:** Full support for Authorization Code (with PKCE) and Refresh Token grants.
 *   **OpenID Connect (OIDC) Provider:** Standardized `id_token` issuance, discovery (`/.well-known/openid-configuration`), and UserInfo endpoints.
-*   **Hybrid JWT Lifecycle Management:** Ed25519-signed asymmetric JWTs combined with high-speed Redis-backed token introspection and revocation.
-*   **Dynamic Token Rotation:** One-time use Refresh Tokens with rotation and family-based invalidation upon reuse detection.
-*   **Token Introspection & Revocation:** RFC 7662 and RFC 7009 compliant introspection and revocation endpoints.
-*   **Defense-in-Depth Security:** Built-in IP blacklisting, progressive rate limiting, and brute-force protections.
-*   **Granular Authorization:** Flexible Scope and Role-Based Access Control (RBAC) enforced at the token level.
-*   **Session Management:** Global session tracking allowing distributed global sign-out capabilities.
-*   **Authentication Logging:** Comprehensive audit trails for all authentication events.
-*   **Redis-Backed Caching:** Hyper-fast ephemeral data management for non-blocking IO.
-*   **Centralized Identity:** Single source of truth for user models, decoupled from application-specific databases.
+*   **Asymmetric JWT Lifecycle Management:** RS256 signed JWTs enabling upstream services to verify tokens completely statelessly.
+*   **Opaque Refresh Tokens:** SHA-256 hashed refresh tokens persisted securely in the database for session continuity.
+*   **Defense-in-Depth Security:** Built-in strict route-based memory rate limiting and brute-force protections.
+*   **Centralized Identity:** Single source of truth for user credentials, decoupled from application-specific databases.
+*   **Telemetry Ready:** Fully instrumented with OpenTelemetry for distributed microservice tracing.
 
 ---
 
 ## 4. 🏛️ System Architecture
 
-AegisID is designed as a standalone boundary service. It absorbs all identity-related computational overhead (hashing, signing, cache lookups) leaving downstream services to perform simple, low-latency asymmetric cryptographic signature verifications.
+AegisID is designed as a standalone boundary service. It absorbs all identity-related computational overhead (hashing, signing, validation) leaving downstream services to perform simple, low-latency asymmetric cryptographic signature verifications.
 
 ```mermaid
 graph TD
@@ -61,155 +57,128 @@ graph TD
     classDef database fill:#27AE60,stroke:#1E8449,stroke-width:2px,color:#fff;
     classDef cache fill:#C0392B,stroke:#922B21,stroke-width:2px,color:#fff;
 
-    Client[Web/Mobile Client]:::client -->|HTTPS / OAuth2| API[API Gateway / Load Balancer]:::boundary
-    Resource[Resource Server / Microservices]:::client -->|Token Introspection| API
+    Client[Web / Mobile Client / SPA]:::client -->|HTTPS / OAuth2| API[AegisID API Layer]:::boundary
+    Resource[Resource Server]:::client -->|Fetch JWKS| API
     
-    API --> Controller[AegisID Auth Controller]:::core
+    API --> Routes[Express Route Controllers]:::core
     
-    subgraph AegisID Cluster [Centralized Identity Platform]
-        Controller --> AuthService[Auth Service]:::core
-        Controller --> OIDCService[OIDC Service]:::core
+    subgraph AegisID Node Cluster [Centralized Identity Platform]
+        Routes --> AuthService[Auth Service]:::core
+        Routes --> OauthService[OAuth Service]:::core
+        Routes --> JWKSService[JWKS & Token Service]:::core
         
-        AuthService <--> TokenService[Token Generation & Validation]:::core
-        AuthService <--> Crypto[Crypto Engine]:::core
+        AuthService <--> Crypto[Bcrypt Engine]:::core
+        JWKSService <--> Jose[Jose RSA Signing]:::core
         
-        TokenService <--> Redis[(Redis Cache Cluster)]:::cache
-        AuthService <--> Postgres[(PostgreSQL DB)]:::database
+        OauthService <--> Redis[(Redis Ephemeral Cache)]:::cache
+        AuthService <--> Postgres[(PostgreSQL DB via Prisma)]:::database
+        OauthService <--> Postgres
     end
     
-    Redis -.->|Rate Limits / Blacklist / Sessions| TokenService
-    Postgres -.->|User / Client Info| AuthService
+    Redis -.->|Auth Code TTLs| OauthService
+    Postgres -.->|User / Client / Tokens| AuthService
 ```
 
 ### Architectural Principles
-*   **Statelessness for Scale:** The core application layer is completely stateless, enabling horizontal scaling by simply spinning up more AegisID containers behind the load balancer.
-*   **Boundaries & Isolation:** Identity is physically disjoint from product data. Resource servers do not have access to passwords or PII.
-*   **Service Layers:** Strict separation of concerns enforcing Domain-Driven Design (DDD).
+*   **Stateless Verification:** Downstream services verify tokens statelessly using public keys exposed via the JWKS endpoint.
+*   **Strict Domain Bounds:** Identity credentials (passwords, salts) live entirely within the Aegis PostgreSQL DB.
+*   **Ephemeral State Offloading:** Redis handles ultra-fast read/writes for 5-minute time-to-live OAuth state codes, preventing DB bloat.
 
 ---
 
 ## 5. 🧩 Component Architecture
 
-The internal architecture strictly adheres to Domain-Driven Design and the layered architecture pattern.
+The internal architecture strictly adheres to a modular, service-oriented structure.
 
 | Layer | Responsibility | Key Mechanics |
 | :--- | :--- | :--- |
-| **API Layer** | SSL Termination, WAF, routing, and protocol translation. | Reverse Proxy, API Gateway configuration. |
-| **Controller Layer** | HTTP parsing, input sanitization, DTO validation. | Strict schema validation (e.g., Zod/Joi schema checks). |
-| **Service Layer** | Core business logic, OAuth2 state machine, OIDC claims formatting. | Orchestrating Repositories, executing cryptography, identity rules. |
-| **Repository Layer** | Database abstraction, SQL query generation. | Prepared statements to mitigate SQL Injection automatically. |
-| **Cache Layer** | Ephemeral state management, session pinning, fast IO. | Redis hashes, sets, and atomic Lua scripts. |
-| **Database Layer** | Persistent ACID storage. | PostgreSQL with strict relational constraints and indexing. |
+| **Route Layer** | HTTP parsing, routing, rate limiting. | Express.js routers and middleware. |
+| **Validator Layer** | Input sanitization and payload checking. | Zod schema validation ensuring strict type-safety. |
+| **Service Layer** | Core business logic, OAuth state machine, JWT generation. | Centralized TS classes (Auth, OAuth, Telemetry). |
+| **Repository Layer** | Database abstraction, relational integrity. | Prisma ORM with generated strictly-typed schemas. |
+| **Cache Layer** | Short-lived OAuth flow state management. | `ioredis` for ultra-fast Key-Value TTL storage. |
+| **Crypto Layer** | Asymmetric generation and hashing. | `bcrypt`, `jose` for RS256 JWTs, Node `crypto`. |
 
 ---
 
 ## 6. 🔄 Request Lifecycle
 
-Let's dissect the exact system flow of a standard user login request mapping deeply into the system's memory.
+Let's dissect the exact system flow of a standard user login and PKCE token exchange request mapping deeply into the system's memory.
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant API as API Layer
-    participant Ctrl as Controller Layer
-    participant Svc as Service Layer
-    participant DB as Database Layer
-    participant Tok as Token Generation
-    participant Cache as Cache Layer
+    participant C as Client App
+    participant Ctrl as Route Controller
+    participant Svc as Auth/OAuth Services
+    participant DB as PostgreSQL
+    participant Tok as Token Vault
+    participant Cache as Redis
 
-    C->>API: POST /api/v1/auth/login
-    API->>Ctrl: Route Request & Validate DTO
-    Ctrl->>Svc: Authenticate User
-    Svc->>DB: Query User Hash & Salt
-    DB-->>Svc: Return Crypto Material
-    Svc->>Svc: Constant-Time Hash Verification
-    Svc->>Tok: Issue Authorization Material
-    Tok->>Cache: Persist Session / Refresh Token
-    Cache-->>Tok: ACK
-    Tok-->>Svc: Access & Refresh Tokens
-    Svc-->>Ctrl: Construct Response payload
-    Ctrl-->>API: 200 OK + Payload
-    API-->>C: JSON Token Response
+    C->>Ctrl: POST /auth/login {email, password}
+    Ctrl->>Svc: Validate Credentials
+    Svc->>DB: Fetch User & Bcrypt Hash
+    DB-->>Svc: Hash payload
+    Svc->>Svc: Compare BCrypt Hash
+    Svc-->>Ctrl: Returns User Context
+    Ctrl->>Svc: Initiate OAuth Flow (code_challenge)
+    Svc->>Cache: Set auth_code (TTL: 5 min)
+    Svc-->>C: 200 OK + auth_code
+    
+    C->>Ctrl: POST /oauth/token {code, code_verifier}
+    Ctrl->>Svc: Exchange Code
+    Svc->>Cache: Get & DELETE auth_code
+    Svc->>Svc: Validate PKCE code_challenge vs verifier
+    Svc->>Tok: Sign Tokens
+    Tok->>DB: Persist Hashed Refresh Token
+    Tok-->>Ctrl: RS256 JWTs
+    Ctrl-->>C: 200 OK { access_token, id_token, refresh_token }
 ```
-
-**Step by step:**
-1. A client initiates a login request. The API Gateway forwards it to the Controller.
-2. The Controller validates the JSON payload structure and forwards it to the Auth Service.
-3. The Auth Service fetches the user's securely hashed password from the Database repository.
-4. Cryptographic verification succeeds. The Auth Service calls Token Generation.
-5. Ed25519-signed Access Tokens and cryptographically opaque Refresh Tokens are generated.
-6. The Cache Layer persists the session and the refresh token family.
-7. The Controller serializes the response and sends it back to the Client.
 
 ---
 
 ## 7. 🔐 OAuth2 Flows
 
-AegisID implements robust OAuth2.0 flows optimized for modern Application architectures.
+AegisID implements modern OAuth2.0 flows optimized for high-security environments.
 
-### Authorization Code Flow (with PKCE)
-Designed for single-page apps (SPA) and mobile apps where client secrets cannot be securely stored.
+### Authorization Code Flow with PKCE
+Designed natively to prevent authorization code interception, mandatory for both mobile and single-page applications.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant ClientApp
-    participant AuthServer
+    participant AegisID
     
     User->>ClientApp: Clicks Login
-    ClientApp->>AuthServer: Authorization Request (with code_challenge)
-    AuthServer->>User: Renders Login Prompt
-    User->>AuthServer: Submits Credentials
-    AuthServer->>ClientApp: Generates & Returns Authorization Code
-    ClientApp->>AuthServer: Exchange Code for Token (with code_verifier)
-    AuthServer->>AuthServer: Validate PKCE code_verifier
-    AuthServer->>ClientApp: Issues Access Token & ID Token
+    ClientApp->>AegisID: GET /authorize (with code_challenge)
+    AegisID->>User: Renders Consent/Login UI
+    User->>AegisID: Approves & Provides Credentials
+    AegisID->>ClientApp: Redirects with short-lived 'code'
+    ClientApp->>AegisID: POST /token (code + code_verifier)
+    AegisID->>AegisID: Cryptographically verify PKCE hash
+    AegisID->>ClientApp: Returns Access Token & Refresh Token
 ```
 
-### Client Credentials Flow
-Designed for machine-to-machine (M2M) communication where no end-user is involved.
-
-```mermaid
-sequenceDiagram
-    participant Microservice
-    participant AuthServer
-    
-    Microservice->>AuthServer: POST /token (client_id, client_secret)
-    AuthServer->>AuthServer: Verify Client Secret
-    AuthServer->>Microservice: Issues Access Token (Client Scopes only)
-```
-
-### Refresh Token Flow
-Secures long-lived sessions using short-lived access tokens and rotating refresh tokens.
-
-```mermaid
-sequenceDiagram
-    participant ClientApp
-    participant AuthServer
-    
-    ClientApp->>AuthServer: POST /token (grant_type=refresh_token)
-    AuthServer->>AuthServer: Invalidate Old Refresh Token
-    AuthServer->>AuthServer: Generate New Access & Refresh Tokens
-    AuthServer->>ClientApp: Returns new Token Pair
-```
+### Refresh Token Grant
+When a short-lived Access Token expires (15m), the client uses the persistent Refresh Token to obtain a new pair, securely orchestrated via database revocation flags.
 
 ---
 
 ## 8. 🆔 OpenID Connect (OIDC) Integration
 
-AegisID extends OAuth2 to provide federated identity via the OIDC specification.
+AegisID natively supports OpenID Connect standards for federated application mapping.
 
-*   **Discovery Endpoint:** Exposes `/.well-known/openid-configuration` revealing JWKS URIs, supported scopes, and available assertions.
-*   **The `id_token`:** A JWT strictly meant for the client application containing authenticated user assertions (`sub`, `name`, `email`).
-*   **UserInfo Endpoint:** An OAuth2 protected endpoint (`/userinfo`) returning standardized claims about the authenticated user based on consented scopes.
+*   **Discovery Endpoint:** Exposes `/.well-known/openid-configuration` revealing issuer URIs and supported algorithms.
+*   **JWKS Endpoint:** Upstream microservices pull the RSA public keys from `/.well-known/jwks.json` to verify the digital signatures on access and id tokens.
+*   **The `id_token`:** A strict RS256 JWT meant for the client application containing authenticated assertions (`sub`, `email`, `name`).
+*   **UserInfo:** The `/userinfo` endpoint allows resource servers to fetch profile data dynamically.
 
 ```mermaid
 graph LR
-    subgraph OIDC Spec
-        Discovery[Discovery Endpoint] --> Keys[JWKS Endpoint]
-        Tokens[Token Endpoint] --> IDToken[ID Token / JWT]
-        Tokens --> AccessToken[Access Token]
-        AccessToken --> UserInfo[UserInfo Endpoint]
+    subgraph OIDC Specifications
+        Discovery[Discovery / Config] --> Keys[JWKS Endpoint]
+        Tokens[Oauth/Token] --> IDToken[id_token JWT]
+        Tokens --> AccessToken[access_token JWT]
     end
 ```
 
@@ -217,148 +186,114 @@ graph LR
 
 ## 9. ⏳ Token Lifecycle & Cryptography
 
-AegisID securely manages the full lifecycle of generated tokens.
+All cryptographic operations are handled purely via Node's Native Crypto and heavily vetted libraries.
 
-```mermaid
-graph TD
-    Start(User Authenticates) --> Generate[Token Generation]
-    Generate --> Sign[Token Signing (Ed25519)]
-    Sign --> Issue[Token Issued to Client]
-    
-    Issue --> Verify[Token Verification via JWKS] --> Active
-    
-    Active --> Expire[Token Expiration (15m)]
-    Active --> Revoke[Token Revocation (Manual Log Out)]
-    
-    Expire --> Refresh[Refresh Token Rotation]
-    Revoke --> Blacklist[Added to Redis Blacklist]
-    
-    Refresh --> Generate
-```
-
-1.  **Generation:** Access tokens are signed using **Ed25519 (EdDSA)**. Ed25519 provides deterministic, highly secure signatures that are exponentially faster to verify than RSA, lowering CPU strain on resource servers.
-2.  **State:** Access tokens are strictly stateless and lived for 15 minutes.
-3.  **Blacklisting (Revocation):** When a user logs out, the JWT's `jti` (JWT ID) is placed in a Redis Blacklist until its actual expiration time, rendering it useless.
+1.  **Generation:** Access tokens and ID tokens are signed using **RSA (RS256)** via the `jose` library. This asymmetric signing requires AegisID to hold the Private Key, while any service globally can verify the signature using the Public Key.
+2.  **Access Token State:** Access tokens are strictly stateless and live for exactly **15 minutes**.
+3.  **Refresh Token State:** Highly random UUIDs are generated, hashed using SHA-256 natively, and stored in PostgreSQL. The client holds the plain-text UUID, which it exchanges.
 
 ---
 
-## 10. ⚡ Redis Design & Hot Cache
+## 10. ⚡ Redis Design
 
-Redis is the high-octane engine powering AegisID's speed and security state. 
+AegisID uses Redis strategically to offload ephemeral state from the relational database, ensuring maximum throughput during authentication bursts.
 
 ```mermaid
 graph TD
-    Redis[(Redis Cluster)]
+    Redis[(Redis Service)]
     
-    subgraph Cache Use Cases
-        RL[Rate Limiting Cache <br/> Fixed Window]
-        BL[JWT Blacklist Sets <br/> Key: jti]
-        RT[Refresh Token Store <br/> Key: family_id]
-        SS[Session Store <br/> Active Devices]
+    subgraph Ephemeral Operations
+        AuthCode[OAuth Authorization Codes <br/> TTL: 5 Minutes]
     end
     
-    Redis --> RL
-    Redis --> BL
-    Redis --> RT
-    Redis --> SS
+    Redis --> AuthCode
+    AuthCode --> |Exchanged & Purged| Success
+    AuthCode --> |Timeout| Purged
 ```
 
-*   **Token Cache:** JTI tracking for stateless JWT revocation.
-*   **Session Store:** Tracks active UI sessions to allow users to "Log out from all devices."
-*   **Refresh Tokens:** Stored as hashed key-value pairs (`aegis:refresh:{user_id}:{token_hash}`) with an exact TTL matching the token's lifetime, ensuring automatic cleanup.
-*   **Token Blacklist:** O(1) time complexity `SISMEMBER` checks for edge-case synchronous introspection.
+*   **OAuth Authorization Codes:** Stored as `string` key-value pairs (`auth_code:{code}`) holding the related `clientId`, `userId`, and PKCE `codeChallenge`. They strict-expire via Redis `EX` TTL constraints.
 
 ---
 
 ## 11. 🗄️ Database Design
 
-PostgreSQL acts as the system of record. The schema is highly normalized to guarantee relational integrity.
+PostgreSQL acts as the unbreakable system of record. The schema is highly normalized using Prisma.
 
 ```mermaid
 erDiagram
-    USERS ||--o{ SESSIONS : owns
-    USERS ||--o{ TOKENS : issued
-    CLIENTS ||--o{ TOKENS : receives
-    USERS ||--o{ ROLES : assigned
-    CLIENTS ||--o{ REDIRECT_URIS : registers
-    
-    USERS {
-        uuid id PK
-        string email UK
-        string password_hash
-        boolean is_active
-        timestamp created_at
+    User ||--o{ Credential : "has"
+    User ||--o{ RefreshToken : "owns"
+    User ||--o{ AuthorizationCode : "generates"
+    OAuthClient ||--o{ RefreshToken : "issues"
+    OAuthClient ||--o{ AuthorizationCode : "requests"
+
+    User {
+        String id PK
+        String email UK
+        Boolean emailVerified
+        DateTime createdAt
     }
     
-    SESSIONS {
-        uuid id PK
-        uuid user_id FK
-        string ip_address
-        string user_agent
-        timestamp last_active
+    Credential {
+        String id PK
+        String userId FK
+        Enum type "PASSWORD | OAUTH"
+        String passwordHash
     }
 
-    TOKENS {
-        uuid id PK
-        uuid user_id FK
-        uuid client_id FK
-        string refresh_hash UK
-        string family_id
-        timestamp expires_at
+    OAuthClient {
+        String clientId UK
+        String[] redirectUris
+        String[] grantTypes
     }
-
-    CLIENTS {
-        uuid id PK
-        string client_secret_hash
-        string name
-        boolean confidential
+    
+    RefreshToken {
+        String id PK
+        String userId FK
+        String clientId FK
+        String tokenHash UK
+        DateTime expiresAt
+        Boolean revoked
     }
 ```
 
 ---
 
-## 12. 🛡️ Authorization Model
+## 12. 🛡️ Authorization Architecture
 
-AegisID decouples Authentication (who are you?) from Authorization (what can you do?).
+AegisID utilizes granular OAuth client verification rules alongside the core identity.
 
-*   **Scopes:** Defines what a *Client Application* is allowed to access on the user's behalf (e.g., `read:profile`, `write:documents`).
-*   **Roles:** Defines what the *User* is inherently allowed to do in the system (e.g., `SUPER_ADMIN`, `SUPPORT_STAFF`).
-*   **Permissions:** Granular access rules bound to Roles.
-*   **Access Checks:** When an Access Token is minted, AegisID computes the intersection of User Roles and allowed Client Scopes, embedding the resolved permissions into the token's claims array.
+*   **Client Segmentation:** Access tokens are strictly scoped to the exact `clientId` via the `audience` claim.
+*   **Refresh Targeting:** Token revocation specifically updates the database flag (`revoked: true`) targeting the junction of `userId` & `clientId`.
 
 ---
 
 ## 13. 🔒 Security Architecture
 
-Security is not an afterthought; it is integrated deeply into the compilation and execution layers.
+Security is integrated deeply into the memory execution layers.
 
 | Vector | Mitigation Strategy | Implementation Details |
 | :--- | :--- | :--- |
-| **Password Hashing** | Cryptographic Hashing | `Argon2id` with tuned memory cost to defeat ASICs/GPUs. |
-| **JWT Signing** | Asymmetric Signatures | Ed25519 keys, rotated every 30 days securely via KMS. |
-| **Replay Protection** | Short-Lived Tokens + JTI | Access tokens expire in 15m. Critical endpoints enforce `jti` checks. |
-| **Rate Limiting** | Redis Cache Control | Strict boundaries on login/introspection endpoints. |
-| **Token Revocation** | Ephemeral Blacklists | JWT revocation via Redis Sets with automatic TTL identical to token expiration. |
-| **Session Invalidation** | Distributed Sign-Out | Webhook broadasting and refresh family purging. |
-| **Input Validation** | Schema Enforcements | Guaranteed DTO sanitation to prevent NoSQL/SQL injections and XSS. |
+| **Credential Theft** | Cryptographic Hashing | `bcrypt` (Salt Rounds: 9) ensuring massive resistance against dictionary attacks. |
+| **Token Replay** | Short Lived Tokens | Access tokens definitively expire in 15m. |
+| **Timing Attacks** | Constant-time Hashing | Node crypto `sha256` hashing utilized for all PKCE verifier validations. |
+| **Database Bloat** | Ephemeral Cache | Temporary codes live in Redis and are destroyed instantly upon use or timeout. |
+| **Input Exploits** | Strict Zod Guardrails | Fully typed TypeScript + Zod parse/throw mechanics reject malformed JSON directly at the Express middleware boundary. |
 
 ---
 
 ## 14. ⏱️ Rate Limiting Design
 
-A brute-force attack on an authentication endpoint can take down a database. AegisID mitigates this natively using a **Fixed Window Counter** algorithm implemented via Redis Lua scripts.
+A brute-force attack on an authentication endpoint can bottleneck the Event Loop and database. AegisID mitigates this natively using memory-based Rate Limiters.
 
 ```mermaid
 graph LR
-    Req[Incoming API Request] --> IPCheck{Evaluate Client IP Limit}
-    IPCheck --> |< Threshold| Allow[Process Authentication]
-    IPCheck --> |> Threshold| Block[Return 429 Too Many Requests]
-    Block --> Alert[Audit Event Logged]
+    Req[Incoming Login Request] --> IPCheck{Check Limits}
+    IPCheck --> |< 10 req / 15 min| Allow[Process DB Lookup]
+    IPCheck --> |> 10 req / 15 min| Block[HTTP 429 Too Many Requests]
 ```
-
-*   **Algorithm Used:** Fixed Window. It provides O(1) performance in Redis and predictability.
-*   **Sliding Window / Token Bucket:** Also supported via configuration for more burst-heavy M2M endpoints.
-*   **Granularity:** Login endpoints enforce `10 req / min`. Introspection endpoints allow `10,000 req / min`.
+*   **Global Limits:** 100 requests / 15 minutes globally.
+*   **Strict Auth Limits:** (Login & Token Exchange) 10 requests / 15 minutes window to severely limit credential-stuffing bots.
 
 ---
 
@@ -366,116 +301,105 @@ graph LR
 
 AegisID adheres to strict RESTful standards and intuitive contract design. All payloads are `application/json`.
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/api/v1/users/register` | Registers a new internal identity. |
-| `POST` | `/oauth2/token` | Standard OAuth2 Token issuance (Code, Refresh, Client Creds). |
-| `GET` | `/oauth2/authorize` | Initiates Auth Code flow, renders UI consent. |
-| `POST` | `/oauth2/introspect` | Validates an access token and returns active status. |
-| `POST` | `/oauth2/revoke` | Invalidates an active token / session immediately. |
+| HTTP Method | Endpoint | Description | Layer |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/auth/register` | Creates a new user identity & bcrypt hash. | Identity |
+| `POST` | `/auth/login` | Authenticates and initiates state (Auth Code). | Identity |
+| `POST` | `/oauth/token` | Exchanges Auth Code or Refresh Token for JWTs. | OAuth |
+| `GET` | `/.well-known/openid-configuration` | Standard discovery endpoint. | OIDC |
+| `GET` | `/.well-known/jwks.json` | Exposes RS256 Public Keys for microservices. | OIDC |
+| `GET` | `/userinfo` | Endpoint for token-derived user asserts. | OIDC |
 
-### Example Request: Exchange Code for Token (`/oauth2/token`)
+### Example Request (`/oauth/token`) Exchanging PKCE
 ```http
-POST /oauth2/token HTTP/1.1
-Content-Type: application/x-www-form-urlencoded
+POST /oauth/token HTTP/1.1
+Content-Type: application/json
 
-grant_type=authorization_code
-&code=SplxlOBeZQQYbYS6WxSbIA
-&client_id=client-app-id
-&code_verifier=dBjftJeZ4CVK-mJq25l_...
+{
+  "code": "8e3c-4b...",
+  "codeVerifier": "mJq25l_...",
+  "clientId": "client-uuid"
+}
 ```
 
 ### Example Response (`200 OK`)
 ```json
 {
-  "access_token": "eyJhbG... (JWT)",
-  "token_type": "Bearer",
-  "expires_in": 900,
-  "refresh_token": "rt-def-456-uvw",
-  "id_token": "eyJhbG... (JWT)"
+  "accessToken": "eyJhbG...",
+  "idToken": "eyJhbG...",
+  "refreshToken": "fb32a-..."
 }
 ```
 
 ---
 
-## 16. 💥 Error Handling & Idempotency
+## 16. 💥 Error Handling & Telemetry
 
-Predictable error models are vital for internal orchestration. AegisID returns standard RFC 7807 Problem Details for HTTP APIs.
+AegisID utilizes strict error routing and full instrumentation.
 
-*   **HTTP Error Model:** Expressive status codes (400, 401, 403, 409, 429).
-*   **Validation Errors:** Strongly typed schema violation reporting.
-*   **Auth Errors:** Opaque generic errors to prevent email enumeration (e.g., "Invalid credentials").
-*   **Structured Responses:** Every error includes a `trace_id` for debugging.
-
-```json
-{
-  "error": "invalid_grant",
-  "error_description": "The provided authorization grant is invalid, expired, or revoked.",
-  "trace_id": "req-9f8a8b1a2c3d"
-}
-```
+*   **Error Middleware:** All thrown exceptions fall through to a strictly typed Error Handler, returning safe, sanitized error payloads without leaking database configurations.
+*   **OpenTelemetry:** Configured completely utilizing `@opentelemetry/auto-instrumentations-node` and `exporter-trace-otlp-http`, pushing spans for all DB lookups, Express routes, and outgoing requests.
 
 ---
 
 ## 17. 📁 Project Structure
 
-Designed for extreme maintainability and clear domain boundaries.
+Designed for enterprise-level maintainability.
 
 ```text
+├── keys/                # Private & Public RSA PEM keys
+├── prisma/              # Schema declarations and Migrations
 ├── src/
-│   ├── api/             # API Gateway, Controllers, Routes
-│   ├── config/          # Environment bindings, DI container setups
-│   ├── core/            # Cryptography, Tokens, Core Utilities
-│   ├── domain/          # Entities, Enums, Error Classes
-│   ├── infrastructure/  # Repositories (Postgres), Caches (Redis)
-│   ├── middleware/      # Rate limits, Auth guards, Error boundaries
-│   ├── services/        # Business logic, OAuth2/OIDC Engines
-│   └── tests/           # Unit, Integration, E2E Suites
-├── docker-compose.yml   # Local environment definitions
-├── package.json         # Dependencies
-└── tsconfig.json        # TypeScript configuration
+│   ├── cache/           # Redis ioredis client configurations
+│   ├── config/          # Environment variable bindings
+│   ├── db/              # Prisma client singletons
+│   ├── middleware/      # Rate limits, Error boundaries
+│   ├── routes/          # Express route declarations (auth, oauth, wellknown)
+│   ├── services/        # Core logic (auth.service, jwks.service, oauth.services)
+│   ├── telemetry/       # OpenTelemetry bindings
+│   ├── utils/           # JWT verifications and signers
+│   └── validators/      # Zod DTO schema validations
+└── package.json         # Node constraints and dependencies
 ```
 
 ---
 
 ## 18. 🚀 Performance Optimization
 
-Achieving sub-20ms latency on the critical authentication path:
+Designed for Node.js V8 execution speed:
 
-1.  **Redis Caching:** Rapid lookup for stateful data without hitting the DB.
-2.  **Stateless JWT:** Downstream services verify tokens cryptographically without network calls to AegisID.
-3.  **Query Optimization:** Compound indexing on PostgreSQL (`email`, `client_id`, `family_id`).
-4.  **Concurrency Handling:** Node.js event-loop optimization with detached worker threads for heavy Argon2id hashing.
+1.  **RS256 Private Key Caching:** Keys are loaded via `readFileSync` directly at module startup into memory, preventing disk IO upon token generation.
+2.  **Connection Pooling:** Prisma utilizes connection strategies for PostgreSQL optimizations.
+3.  **No ORM Overhead on Transients:** Temporary states bypass the ORM and go directly to Redis.
 
 ---
 
 ## 19. 🕵️ Threat Model
 
-We architect under the assumption that the network boundary is hostile.
+Built under the assumption that the upstream boundary is hostile.
 
-| Threat | System Mitigation |
+| Threat | System Defense |
 | :--- | :--- |
-| **Brute Force Login** | Proactive Redis rate-limiting (Fixed Window) + timed account lockouts. |
-| **Token Replay** | Strict 15-minute token TTL alongside cryptographically bound JTI uniqueness. |
-| **Session Hijacking** | Access Tokens bound to specific client IPs; Refresh token rotation kills hijacked sessions instantly. |
-| **Credential Stuffing** | Passwords hashed via memory-hard Argon2id, impossible to reverse in bulk offline. |
+| **Credential Stuffing** | Strict 10req/15min rate limits on `/auth/login` to prevent bulk automated testing. |
+| **Database Exfiltration** | Passwords hashed via Bcrypt (cost 9), computationally expensive to reverse offline. |
+| **Token Modification** | RSA asymmetric verification guarantees payload integrity. |
+| **PKCE Replay Attack** | Temporary Auth Codes expire inside Redis, avoiding lingering state. |
 
 ---
 
-## 20. 🔌 Extensibility
+## 20. 🔌 Extensibility & Scalability
 
-AegisID is built to be the root of identity, easily extended for enterprise needs:
-*   **Additional OAuth2 Grants:** Strategy pattern allows dropping in custom grants (e.g., `urn:custom:mfa:grant`).
-*   **SSO Integration:** SAML and enterprise OIDC upstream mapping.
-*   **Enterprise Identity Providers:** LDAP/Active Directory bindings.
+AegisID is built purely stateless on the Express tier:
+*   **Horizontal Scale:** Because rate limits are memory-based and Redis handles cross-node state, spinning up massive parallel Node instances requires zero code changes.
+*   **Easy OIDC Adoption:** New microservices simply scrape the URL `/.well-known/jwks.json` and immediately inherit secure authentication verification capabilities.
 
 ---
 
 ## 21. 🛣️ Future Roadmap
 
-- [ ] **WebAuthn / Passkeys:** Transitioning away from passwords entirely via biometric device hardware keys (FIDO2).
-- [ ] **Adaptive Authentication:** Machine learning integration to challenge users based on IP geofence anomalies or impossible-travel conditions.
-- [ ] **Hardware Security Module (HSM) Support:** Delegating critical JWT signing operations to dedicated secure enclaves.
+- [ ] **Redis Rate Limiting:** Transitioning `express-rate-limit` to utilize a Redis store for distributed rate locking across multiple pod instances.
+- [ ] **JWT Blacklist Implementation:** Pushing revoked Access Token `jti` to Redis for absolute synchronous token invalidation before the 15m expiration.
+- [ ] **Role-Based Access Control (RBAC):** Implementing relational `Role` and `Permission` matrices within Prisma.
 
 ---
 
